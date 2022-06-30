@@ -3,17 +3,35 @@ import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import shortest_path
 
-def find_projection(jump_list, f_vals, gamma, hz):
+def find_projection(f_vals, gamma, fs):
+    """
+    Find a projection of a piecewise constant function on the space of functions with lower bound on the minimum duration of activities.
+
+    Parameters
+    ----------
+    f_vals : pandas Series
+             a Series representing the state sequence f
+    gamma : double
+            the penalty for the jump in a projection
+    fs : integer
+         sampling frequency
+            
+    Returns
+    -------
+    f_hat_vals : list of states of a projection of f_vals
+    """
     all_est_states = []
     all_est_vertices = []
 
-    jump_sets = identify_jump_subseq(jump_list, 2 * gamma * hz)
+    jump_list = f_vals.index[abs(f_vals.diff()) > 0].tolist()
+    
+    jump_sets = identify_jump_subseq(jump_list, 2 * gamma * fs)
 
     for jump_set in jump_sets:
         states = [f_vals.loc[jump_set[k]] for k in range(len(jump_set))]
         states.insert(0, f_vals.loc[jump_set[0] - 1])
 
-        est_vertices, est_states = find_projection_single_jump_set(jump_set, states, gamma, hz)
+        est_vertices, est_states = find_projection_single_jump_set(jump_set, states, gamma, fs)
 
         all_est_vertices.append(est_vertices[1:-1])
         all_est_states.append(est_states[:-1])
@@ -30,7 +48,27 @@ def find_projection(jump_list, f_vals, gamma, hz):
         
     return f_hat_vals
 
-def find_projection_single_jump_set(jump_set, states, gamma, hz):
+def find_projection_single_jump_set(jump_set, states, gamma, fs):
+    """
+    Find a projection of a piecewise constant function on the space of functions with lower bound on the minimum duration of activities.
+    This function is specifically designed for a case when the consecutive jumps of the function are distant by at most 2 * gamma from each other 
+
+    Parameters
+    ----------
+    jump_set : list of integers
+               a list of jumps of the function
+    states : list of integers
+             a list of states of the function; states[0] is a state of the function before first jump, states[1] is a state of the function between the first two jumps and so on
+    gamma : double
+            the penalty for the jump in a projection
+    fs : integer
+         sampling frequency
+            
+    Returns
+    -------
+    est_vertices : a list of jumps of the function (includes -np.inf and np.inf)
+    est_states : a list of states of the function
+    """
     vertices = jump_set
 
     vertices.insert(0, -np.inf)
@@ -63,12 +101,12 @@ def find_projection_single_jump_set(jump_set, states, gamma, hz):
                         row.append(0.0000000001)
                     else:
                         row.append(temp_val)
-                elif vertex_j-vertex_i < gamma * hz:
+                elif vertex_j-vertex_i < gamma * fs:
                     curr_state = states[j]
                     row.append(0)
                 else:
                     curr_state = states[j]
-                    row.append(gamma * hz + sum([state_dict[key] for key in state_dict.keys() if key != est_state]))
+                    row.append(gamma * fs + sum([state_dict[key] for key in state_dict.keys() if key != est_state]))
             else:
                 row.append(0)
                 estimate_row.append(0)
