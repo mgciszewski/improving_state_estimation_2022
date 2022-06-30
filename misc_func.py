@@ -46,11 +46,12 @@ def generate_state_seq(mu_1, mu_2):
         
     Returns
     -------
-    an array consisting of all locations of the jumps in l
+    is_correct : a list of boolean values referring to whether the noisy labels are correct at each timepoint
+    wrong_states: a list of incorrect states (the length of wrong_states is equal to the number of False values in is_correct)
     """
     total_time = 0
-    state_seq = []
-    incorrect_array = []
+    is_correct = []
+    wrong_states = []
     
     jumps = []
     
@@ -58,7 +59,7 @@ def generate_state_seq(mu_1, mu_2):
         waiting_time = int(np.ceil(np.random.exponential(mu_1)))
         if total_time + waiting_time > 60000:
             waiting_time = 60000 - total_time
-        state_seq += [True for i in range(waiting_time)]
+        is_correct += [True for i in range(waiting_time)]
         total_time += waiting_time
         
         jumps.append(total_time)
@@ -84,10 +85,10 @@ def generate_state_seq(mu_1, mu_2):
         
             jumps.append(total_time)
                 
-            state_seq += [False for i in range(duration_time)]
-            incorrect_array += [incorrect for i in range(duration_time)]
+            is_correct += [False for i in range(duration_time)]
+            wrong_states += [incorrect for i in range(duration_time)]
     
-    return state_seq, incorrect_array
+    return is_correct, wrong_states
 
 def identify_jump_subseq(jumps, gam):
     """
@@ -138,7 +139,7 @@ def mystep(x,y, ax=None, **kwargs):
 
     Returns
     -------
-    the plot of y against xW
+    the plot of y against x
     """
     # convert x and y into numpy array
     x = np.array(x)
