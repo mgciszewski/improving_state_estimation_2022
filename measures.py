@@ -1,7 +1,7 @@
+from itertools import zip_longest
 import numpy as np
-from misc_func import detect_jumps
 
-def lts_measure(correct_df, estimated_df, fs = 1000, w = 0.6, sigma = 0.35, lam = 0.01, zeta = 0.5):
+def lts_measure(true_jumps, true_states, est_jumps, est_states, l = 60, w = 0.6, sigma = 0.35, lam = 0.01, zeta = 0.5):
     """
     Calculates the LTS measure of the estimated labels.
 
@@ -11,8 +11,6 @@ def lts_measure(correct_df, estimated_df, fs = 1000, w = 0.6, sigma = 0.35, lam 
                  Series containing true labels
     estimated_df : pandas Series
                    Series containing estimated labels
-    fs : int
-         sampling frequency
     w : double
         controls the weight of misclassification occurring from the uncertainty of the true labels
     sigma : double
@@ -26,33 +24,33 @@ def lts_measure(correct_df, estimated_df, fs = 1000, w = 0.6, sigma = 0.35, lam 
     -------
     The LTS measure of the estimated labels for given set of parameters.
     """
-    true_jumps = detect_jumps(correct_df)
-    pp_jumps = detect_jumps(estimated_df)
-
     error = 0
-    all_jumps = np.unique(true_jumps + pp_jumps) # segments
-    prev_jump = all_jumps[0]
-    for curr_jump in all_jumps[1:]:
-        prev_true_state = correct_df[prev_jump]
-        prev_pp_state = estimated_df[prev_jump]
-        
-        if prev_true_state != prev_pp_state:
-            if (abs(curr_jump - prev_jump) / fs <= sigma) & (curr_jump < len(correct_df) - 1):
-                if (correct_df[prev_jump - 1] == estimated_df[prev_jump - 1]) & (correct_df[curr_jump + 1] == estimated_df[curr_jump + 1]):
-                    error += w * (curr_jump - prev_jump) / fs
-                else:
-                    error += (curr_jump - prev_jump) / fs
+    all_jumps = list(zip_longest([1] * (len(true_jumps) + 1), true_jumps + [l], true_states, true_states[1:])) + list(zip_longest([2] * (len(est_jumps) + 1), (est_jumps + [l]), est_states, est_states[1:]))
+    all_jumps = sorted(all_jumps, key = lambda tup: tup[1])
+    prev_jump, prev_true_state, prev_est_state = all_jumps[0], 1, 1
+    
+    for jump in all_jumps[1:]:
+        if jump[0] == 1:
+            prev_true_state = jump[2]
+            if prev_jump[0] == 2:
+                prev_est_state = prev_jump[3]
+        else:
+            prev_est_state = jump[2]
+            if prev_jump[0] == 1:
+                prev_true_state = prev_jump[3]
+            
+        if prev_true_state != prev_est_state:
+            if (jump[1] - prev_jump[1] <= sigma) & (jump[0] != prev_jump[0]):
+                error += w * (jump[1] - prev_jump[1])
             else:
-                error += (curr_jump - prev_jump) / fs
-        
-        prev_jump = curr_jump
+                error += jump[1] - prev_jump[1]
+        prev_jump = jump
     
     penalty_term = 0
-    prev_jump = pp_jumps[0] / fs
-    for curr_jump in pp_jumps[1:]:
-        if (curr_jump - prev_jump) / fs < zeta:
+    prev_jump = est_jumps[0]
+    for curr_jump in est_jumps[1:]:
+        if (curr_jump - prev_jump) < zeta:
             penalty_term += lam
-        prev_jump = curr_jump / fs
+        prev_jump = curr_jump
                 
-    max_seconds = len(correct_df) / fs
-    return np.exp(-error / max_seconds - penalty_term)
+    return np.exp(-error / 60 - penalty_term)

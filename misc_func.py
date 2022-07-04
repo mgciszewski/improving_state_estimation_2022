@@ -54,41 +54,56 @@ def generate_state_seq(mu_1, mu_2):
     wrong_states = []
     
     jumps = []
+    states = []
+    accuracy = 0
     
-    while total_time < 60000:
-        waiting_time = int(np.ceil(np.random.exponential(mu_1)))
-        if total_time + waiting_time > 60000:
-            waiting_time = 60000 - total_time
-        is_correct += [True for i in range(waiting_time)]
+    true_dict = {5.0: 1,
+                 15.0: 2,
+                 30.0: 3,
+                 40.0: 2,
+                 55.0: 3,
+                 60.0: 1}
+    
+    while total_time < 60:
+        waiting_time = np.random.exponential(mu_1)
+        if total_time + waiting_time > 60:
+            waiting_time = 60 - total_time
+            states.append(1)
+        else:
+            prev_key = 0
+            for key in true_dict:
+                if (total_time < key) & (total_time + waiting_time >= key):
+                    jumps.append(key)
+                    states.append(true_dict[key])
+                if (total_time + waiting_time < key) & (total_time + waiting_time >= prev_key):
+                    states.append(true_dict[key])
+                prev_key = key
+            jumps.append(total_time + waiting_time)
+        accuracy += waiting_time
         total_time += waiting_time
-        
-        jumps.append(total_time)
 
-        if total_time < 60000:
-            duration_time = int(np.ceil(np.random.exponential(mu_2)))
-            if total_time + duration_time > 59999:
-                duration_time = 59999 - total_time
-            
-            if total_time < 5000: # in state 1
+        if total_time < 60:
+            duration_time = np.random.exponential(mu_2)
+            if total_time + duration_time > 59.999:
+                duration_time = 59.999 - total_time
+            if total_time < 5: # in state 1
                 incorrect = choices([2, 3])[0]
-            elif total_time < 15000: # in state 2
+            elif total_time < 15: # in state 2
                 incorrect = choices([1, 3])[0]
-            elif total_time < 30000: # in state 3
+            elif total_time < 30: # in state 3
                 incorrect = choices([1, 2])[0]
-            elif total_time < 40000: # in state 2
+            elif total_time < 40: # in state 2
                 incorrect = choices([1, 3])[0]
-            elif total_time < 55000: # in state 3
+            elif total_time < 55: # in state 3
                 incorrect = choices([1, 2])[0]
             else: # in state 1
                 incorrect = choices([2, 3])[0]
             total_time += duration_time
         
             jumps.append(total_time)
+            states.append(incorrect)
                 
-            is_correct += [False for i in range(duration_time)]
-            wrong_states += [incorrect for i in range(duration_time)]
-    
-    return is_correct, wrong_states
+    return jumps, states, accuracy / 60
 
 def identify_jump_subseq(jumps, gam):
     """
@@ -187,3 +202,38 @@ def set_size(width = 345.0, fraction=1, subplots=(1, 1)):
     fig_dim = (fig_width_in, fig_height_in)
 
     return fig_dim
+
+def split_function(jumps, states, gam):
+    """
+    Returns array of arrays of jumps. 
+    Jumps are put into one block (array) if the distance between subsequent jumps in the block is smaller than gam.
+
+    Parameters
+    ----------
+    jumps : array of doubles
+            an array of jumps
+    states : array of doubles
+            an array of states
+    gam : double
+        lower bound on the lengths of the intervals (also double the weight of the jump)
+
+    Returns
+    -------
+    res: an array of arrays of doubles
+         a list of all blocks of jumps such that each block contains jumps that have at least one gamma neighbour in it or the block is a singleton
+    res_states : an array of arrays of integers
+                 a list of all blocks of states divided in the same manner as res
+    """
+    res, res_states, last = [[]], [[states[0]]], None
+    
+    for idx in range(len(jumps)):
+        jump = jumps[idx]
+        if last is None or abs(last - jump) < gam:
+            res[-1].append(jump)
+            res_states[-1].append(states[idx + 1])
+        else:
+            res.append([jump])
+            res_states.append([states[idx], states[idx + 1]])
+        last = jump
+
+    return res, res_states

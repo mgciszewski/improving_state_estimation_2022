@@ -1,20 +1,20 @@
-from misc_func import flatten_list, identify_jump_subseq
+from misc_func import flatten_list, split_function
 import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import shortest_path
 
-def find_projection(f_vals, gamma, fs):
+def find_projection(f_jumps, f_states, gamma):
     """
     Find a projection of a piecewise constant function on the space of functions with lower bound on the minimum duration of activities.
 
     Parameters
     ----------
-    f_vals : pandas Series
-             a Series representing the state sequence f
+    f_jumps : list of doubles
+              a list of jumps of f
+    f_states : list of integers
+               a list of states of f
     gamma : double
             the penalty for the jump in a projection
-    fs : integer
-         sampling frequency
             
     Returns
     -------
@@ -22,16 +22,14 @@ def find_projection(f_vals, gamma, fs):
     """
     all_est_states = []
     all_est_vertices = []
-
-    jump_list = f_vals.index[abs(f_vals.diff()) > 0].tolist()
     
-    jump_sets = identify_jump_subseq(jump_list, 2 * gamma * fs)
+    jump_sets, state_sets = split_function(f_jumps, f_states, 2 * gamma)
 
-    for jump_set in jump_sets:
-        states = [f_vals.loc[jump_set[k]] for k in range(len(jump_set))]
-        states.insert(0, f_vals.loc[jump_set[0] - 1])
+    for idx in range(len(jump_sets)):
+        jumps = jump_sets[idx]
+        states = state_sets[idx]
 
-        est_vertices, est_states = find_projection_single_jump_set(jump_set, states, gamma, fs)
+        est_vertices, est_states = find_projection_single_jump_set(jumps, states, gamma)
 
         all_est_vertices.append(est_vertices[1:-1])
         all_est_states.append(est_states[:-1])
@@ -40,15 +38,10 @@ def find_projection(f_vals, gamma, fs):
 
     all_est_vertices = [-np.inf] + flatten_list(all_est_vertices) + [np.inf]
     all_est_states = flatten_list(all_est_states)
-
-    f_hat_vals = [all_est_states[0]] * len(f_vals)
-    
-    for state_idx in range(len(all_est_states) - 1):
-        f_hat_vals[all_est_vertices[state_idx + 1]:len(f_hat_vals)] = [all_est_states[state_idx + 1]] * (len(f_vals) - all_est_vertices[state_idx + 1])
         
-    return f_hat_vals
+    return all_est_vertices, all_est_states
 
-def find_projection_single_jump_set(jump_set, states, gamma, fs):
+def find_projection_single_jump_set(jump_set, states, gamma):
     """
     Find a projection of a piecewise constant function on the space of functions with lower bound on the minimum duration of activities.
     This function is specifically designed for a case when the consecutive jumps of the function are distant by at most 2 * gamma from each other 
@@ -61,8 +54,6 @@ def find_projection_single_jump_set(jump_set, states, gamma, fs):
              a list of states of the function; states[0] is a state of the function before first jump, states[1] is a state of the function between the first two jumps and so on
     gamma : double
             the penalty for the jump in a projection
-    fs : integer
-         sampling frequency
             
     Returns
     -------
@@ -101,12 +92,12 @@ def find_projection_single_jump_set(jump_set, states, gamma, fs):
                         row.append(0.0000000001)
                     else:
                         row.append(temp_val)
-                elif vertex_j-vertex_i < gamma * fs:
+                elif vertex_j-vertex_i < gamma:
                     curr_state = states[j]
                     row.append(0)
                 else:
                     curr_state = states[j]
-                    row.append(gamma * fs + sum([state_dict[key] for key in state_dict.keys() if key != est_state]))
+                    row.append(gamma + sum([state_dict[key] for key in state_dict.keys() if key != est_state]))
             else:
                 row.append(0)
                 estimate_row.append(0)
